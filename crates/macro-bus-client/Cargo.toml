@@ -1,0 +1,14 @@
+[package]
+name = "macro-bus-client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Async Rust client library for the Macro-Bus Protocol (MBP/1.0)."
+
+[dependencies]
+macro-bus-proto.workspace = true
+tokio.workspace = true
+thiserror.workspace = true

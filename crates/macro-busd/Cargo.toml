@@ -1,0 +1,31 @@
+[package]
+name = "macro-busd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "The macro-bus daemon: a fire-and-forget, in-memory pub/sub message bus with optional TLS federation."
+
+[[bin]]
+name = "macro-busd"
+path = "src/main.rs"
+
+[dependencies]
+macro-bus-proto.workspace = true
+tokio.workspace = true
+rustls.workspace = true
+tokio-rustls.workspace = true
+rustls-pemfile.workspace = true
+serde.workspace = true
+toml.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+macro-bus-client.workspace = true
+rcgen.workspace = true

@@ -1,0 +1,22 @@
+[package]
+name = "macro-bus-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "The macro-bus command-line tool: a reference client for publish/subscribe/register/list."
+
+[[bin]]
+name = "macro-bus"
+path = "src/main.rs"
+
+[dependencies]
+macro-bus-proto.workspace = true
+macro-bus-client.workspace = true
+tokio.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

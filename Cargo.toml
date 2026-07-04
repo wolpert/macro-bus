@@ -1,0 +1,50 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/macro-bus-proto",
+    "crates/macro-busd",
+    "crates/macro-bus-client",
+    "crates/macro-bus-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT OR Apache-2.0"
+authors = ["macro-bus contributors"]
+repository = "https://example.invalid/macro-bus"
+
+[workspace.dependencies]
+# Internal
+macro-bus-proto = { path = "crates/macro-bus-proto", version = "0.1.0" }
+macro-bus-client = { path = "crates/macro-bus-client", version = "0.1.0" }
+
+# Async runtime & IO
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "macros", "time", "signal"] }
+
+# TLS (federation)
+rustls = "0.23"
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
+
+# Config / serde
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Errors
+anyhow = "1"
+thiserror = "1"
+
+# Test-only cert generation
+rcgen = "0.13"
+
+[profile.release]
+lto = "thin"
