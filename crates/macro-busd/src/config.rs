@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 /// Default Unix domain socket path used on both Linux and FreeBSD.
-pub const DEFAULT_SOCKET_PATH: &str = "/var/run/macro-bus.sock";
+pub use macro_bus_proto::DEFAULT_SOCKET_PATH;
 
 /// Top-level daemon configuration.
 #[derive(Debug, Clone, Default, Deserialize)]

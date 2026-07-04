@@ -26,6 +26,10 @@ pub use status::Code;
 /// Protocol identifier string used in greetings and capabilities.
 pub const PROTOCOL_ID: &str = "MBP/1.0";
 
+/// Default Unix domain socket path, used by the daemon and the CLI on both
+/// Linux and FreeBSD.
+pub const DEFAULT_SOCKET_PATH: &str = "/var/run/macro-bus.sock";
+
 /// The client-facing greeting line (without trailing CRLF) for a given daemon.
 pub fn greeting(daemon_id: &str) -> String {
     format!("{} {} macro-bus {} ready", status::SERVICE_READY, daemon_id, PROTOCOL_ID)
