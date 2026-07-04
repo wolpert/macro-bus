@@ -1,0 +1,50 @@
+# Example macro-busd configuration.
+#
+# Every field has a default, so this whole file is optional. Copy it, keep the
+# sections you need, and pass it with `macro-busd --config path.toml`.
+#
+# For a STANDALONE local bus, you only need [server] (and often not even that).
+# Delete the [cluster] and [tls] sections entirely.
+
+[server]
+# Cluster-unique daemon id. In a cluster it MUST match this daemon's TLS
+# certificate subjectAltName and must be unique across all peers.
+daemon_id = "d1"
+
+# Unix domain socket that local apps connect to. Default: /var/run/macro-bus.sock
+socket_path = "/tmp/macro-bus.sock"
+
+[limits]
+max_message_bytes      = 1048576   # 1 MiB: max total body size
+max_command_line_bytes = 4096      # max command line length (octets)
+max_body_line_bytes    = 65536     # max single DATA body line (octets)
+queue_depth            = 1024      # per-subscriber outbound queue depth (tail-drop beyond)
+seen_capacity          = 65536     # loop-prevention dedup horizon (recent msg-ids)
+
+# ---------------------------------------------------------------------------
+# Federation (optional). Presence of any [cluster] field REQUIRES [tls].
+# Remove both sections for a standalone daemon.
+# ---------------------------------------------------------------------------
+[cluster]
+# Address to accept inbound peer links on. Omit to only dial out.
+listen = "0.0.0.0:9440"
+
+# Reconnect backoff for dialing peers (milliseconds).
+reconnect_base_ms = 500
+reconnect_max_ms  = 30000
+
+# One entry per peer to dial. `id` must equal the peer's daemon_id / cert SAN.
+[[cluster.peers]]
+id   = "d2"
+addr = "10.0.0.2:9440"
+
+# [[cluster.peers]]
+# id   = "d3"
+# addr = "10.0.0.3:9440"
+
+[tls]
+# Mutual TLS material. `cert`/`key` are this daemon's; `ca` is the bundle used
+# to verify peers (may contain multiple PEM certs).
+cert = "/etc/macro-bus/d1.crt"
+key  = "/etc/macro-bus/d1.key"
+ca   = "/etc/macro-bus/ca.pem"
