@@ -88,3 +88,97 @@ pub fn client_config(tls: &TlsConfig) -> anyhow::Result<Arc<ClientConfig>> {
         .map_err(|e| anyhow::anyhow!("building client tls config: {e}"))?;
     Ok(Arc::new(cfg))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+
+    fn tmp(name: &str) -> std::path::PathBuf {
+        let n = SEQ.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("mb-tls-{}-{}-{}", std::process::id(), n, name))
+    }
+
+    /// Write a self-signed cert/key for `id` and return (cert_path, key_path,
+    /// cert_pem).
+    fn write_node(id: &str) -> (std::path::PathBuf, std::path::PathBuf, String) {
+        let ck = rcgen::generate_simple_self_signed(vec![id.to_string()]).unwrap();
+        let cert_pem = ck.cert.pem();
+        let key_pem = ck.key_pair.serialize_pem();
+        let cert_path = tmp(&format!("{id}.crt"));
+        let key_path = tmp(&format!("{id}.key"));
+        std::fs::write(&cert_path, &cert_pem).unwrap();
+        std::fs::write(&key_path, &key_pem).unwrap();
+        (cert_path, key_path, cert_pem)
+    }
+
+    fn tls_config_for(id: &str, ca_certs: &str) -> TlsConfig {
+        let (cert, key, _) = write_node(id);
+        let ca = tmp(&format!("{id}-ca.pem"));
+        std::fs::write(&ca, ca_certs).unwrap();
+        TlsConfig { cert, key, ca }
+    }
+
+    #[test]
+    fn builds_server_and_client_configs() {
+        let (cert, key, cert_pem) = write_node("d1");
+        let ca = tmp("ca.pem");
+        std::fs::write(&ca, &cert_pem).unwrap();
+        let tls = TlsConfig { cert, key, ca };
+        assert!(server_config(&tls).is_ok());
+        assert!(client_config(&tls).is_ok());
+    }
+
+    #[test]
+    fn loads_certs_key_and_roots() {
+        let (cert, key, cert_pem) = write_node("d2");
+        assert_eq!(load_certs(&cert).unwrap().len(), 1);
+        load_key(&key).unwrap();
+        let ca = tmp("roots.pem");
+        // A CA bundle with two certs.
+        std::fs::write(&ca, format!("{cert_pem}{cert_pem}")).unwrap();
+        let roots = load_roots(&ca).unwrap();
+        assert_eq!(roots.len(), 2);
+    }
+
+    #[test]
+    fn missing_files_error() {
+        let tls = TlsConfig {
+            cert: tmp("nope.crt"),
+            key: tmp("nope.key"),
+            ca: tmp("nope.ca"),
+        };
+        assert!(server_config(&tls).is_err());
+        assert!(client_config(&tls).is_err());
+    }
+
+    #[test]
+    fn empty_cert_file_errors() {
+        let empty = tmp("empty.pem");
+        std::fs::write(&empty, "").unwrap();
+        assert!(load_certs(&empty).is_err());
+    }
+
+    #[test]
+    fn key_file_without_key_errors() {
+        // A file that parses as PEM certs but contains no private key.
+        let (_, _, cert_pem) = write_node("d3");
+        let f = tmp("certonly.pem");
+        std::fs::write(&f, cert_pem).unwrap();
+        assert!(load_key(&f).is_err());
+    }
+
+    #[test]
+    fn shared_ca_bundle_builds_for_two_nodes() {
+        // Emulate the two-node cluster: shared CA bundle = both certs.
+        let ck1 = rcgen::generate_simple_self_signed(vec!["n1".to_string()]).unwrap();
+        let ck2 = rcgen::generate_simple_self_signed(vec!["n2".to_string()]).unwrap();
+        let bundle = format!("{}{}", ck1.cert.pem(), ck2.cert.pem());
+        let t1 = tls_config_for("n1", &bundle);
+        let t2 = tls_config_for("n2", &bundle);
+        assert!(server_config(&t1).is_ok());
+        assert!(client_config(&t2).is_ok());
+    }
+}

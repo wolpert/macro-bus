@@ -105,3 +105,51 @@ impl Drop for LocalServer {
         let _ = std::fs::remove_file(&self.socket_path);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+
+    fn tmp(name: &str) -> PathBuf {
+        let n = SEQ.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("mb-srv-{}-{}-{}", std::process::id(), n, name))
+    }
+
+    fn registry() -> Arc<Registry> {
+        Arc::new(Registry::new("d-srv", 16))
+    }
+
+    #[tokio::test]
+    async fn bind_rejects_non_socket_file() {
+        let f = tmp("regular");
+        std::fs::write(&f, b"not a socket").unwrap();
+        let err = LocalServer::bind(&f, registry(), None, Limits::default());
+        assert!(err.is_err(), "binding over a regular file must fail");
+        std::fs::remove_file(&f).ok();
+    }
+
+    #[tokio::test]
+    async fn bind_rejects_missing_directory() {
+        let p = tmp("no-such-dir").join("x.sock");
+        let err = LocalServer::bind(&p, registry(), None, Limits::default());
+        assert!(err.is_err(), "binding under a missing directory must fail");
+    }
+
+    #[tokio::test]
+    async fn bind_succeeds_and_replaces_stale_socket_then_cleans_up() {
+        let p = tmp("live.sock");
+        // First bind creates the socket.
+        let s1 = LocalServer::bind(&p, registry(), None, Limits::default()).unwrap();
+        assert!(p.exists());
+        // A second bind over the now-stale socket succeeds (replaces it).
+        drop(s1); // Drop removes the file...
+        let s2 = LocalServer::bind(&p, registry(), None, Limits::default()).unwrap();
+        assert!(p.exists());
+        drop(s2);
+        // Drop cleans up the socket file.
+        assert!(!p.exists(), "Drop should remove the socket file");
+    }
+}

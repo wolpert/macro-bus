@@ -99,6 +99,45 @@ fn start_daemon(
     Daemon { socket, _shutdown: tx }
 }
 
+/// Start a daemon that dials several peers (full-mesh member).
+fn start_daemon_multi(
+    node: &Node,
+    listen_port: u16,
+    peers: &[(&str, u16)],
+    ca_path: &std::path::Path,
+) -> Daemon {
+    let socket = tmp(&format!("{}.sock", node.id));
+    let cfg = Config {
+        server: ServerConfig { daemon_id: node.id.clone(), socket_path: socket.clone() },
+        limits: Limits::default(),
+        cluster: ClusterConfig {
+            listen: Some(format!("127.0.0.1:{listen_port}").parse().unwrap()),
+            peers: peers
+                .iter()
+                .map(|(id, port)| PeerConfig {
+                    id: id.to_string(),
+                    addr: format!("127.0.0.1:{port}"),
+                })
+                .collect(),
+            reconnect_base_ms: 50,
+            reconnect_max_ms: 200,
+        },
+        tls: Some(TlsConfig {
+            cert: node.cert_path.clone(),
+            key: node.key_path.clone(),
+            ca: ca_path.to_path_buf(),
+        }),
+    };
+    let (tx, rx) = oneshot::channel();
+    tokio::spawn(async move {
+        let _ = macro_busd::run(cfg, async move {
+            let _ = rx.await;
+        })
+        .await;
+    });
+    Daemon { socket, _shutdown: tx }
+}
+
 /// Read the next message event within a timeout.
 async fn next_msg(
     c: &mut Client<UnixStream>,
@@ -183,4 +222,64 @@ async fn two_daemon_cluster_forwards_with_loop_prevention() {
         }
     }
     assert!(reverse_ok, "message from B never reached A's subscriber");
+}
+
+#[tokio::test]
+async fn three_node_cluster_reforwards_without_duplicates() {
+    // Full mesh d1-d2-d3. A message published on d1 must reach subscribers on
+    // BOTH d2 and d3 exactly once, even though d3 can receive it directly from
+    // d1 AND re-forwarded from d2 (dedup + re-forward path).
+    let n1 = gen_node("d1");
+    let n2 = gen_node("d2");
+    let n3 = gen_node("d3");
+    let ca = tmp("ca3.pem");
+    std::fs::write(&ca, format!("{}{}{}", n1.cert_pem, n2.cert_pem, n3.cert_pem)).unwrap();
+
+    let p1 = free_port();
+    let p2 = free_port();
+    let p3 = free_port();
+
+    let d1 = start_daemon_multi(&n1, p1, &[("d2", p2), ("d3", p3)], &ca);
+    let d2 = start_daemon_multi(&n2, p2, &[("d1", p1), ("d3", p3)], &ca);
+    let d3 = start_daemon_multi(&n3, p3, &[("d1", p1), ("d2", p2)], &ca);
+
+    let mut pub1 = d1.connect().await;
+    let mut sub2 = d2.connect().await;
+    let mut sub3 = d3.connect().await;
+    pub1.register("evt", "k").await.unwrap();
+    sub2.subscribe("evt").await.unwrap();
+    sub3.subscribe("evt").await.unwrap();
+
+    // Establish the mesh: publish probes until both d2 and d3 receive one.
+    let mut up2 = false;
+    let mut up3 = false;
+    for _ in 0..200 {
+        pub1.publish("evt", "k", &["probe"]).await.unwrap();
+        if !up2 && next_msg(&mut sub2, Duration::from_millis(50)).await.is_some() {
+            up2 = true;
+        }
+        if !up3 && next_msg(&mut sub3, Duration::from_millis(50)).await.is_some() {
+            up3 = true;
+        }
+        if up2 && up3 {
+            break;
+        }
+    }
+    assert!(up2 && up3, "mesh never fully established (d2={up2}, d3={up3})");
+
+    // Drain any leftover probes on both subscribers.
+    while next_msg(&mut sub2, Duration::from_millis(150)).await.is_some() {}
+    while next_msg(&mut sub3, Duration::from_millis(150)).await.is_some() {}
+
+    // One unique message from d1 -> exactly once on d2 and d3.
+    pub1.publish("evt", "k", &["ONCE"]).await.unwrap();
+
+    let g2 = next_msg(&mut sub2, Duration::from_millis(1000)).await.expect("d2 delivery");
+    assert_eq!(g2.body, vec!["ONCE".to_string()]);
+    assert!(next_msg(&mut sub2, Duration::from_millis(300)).await.is_none(), "d2 got a duplicate");
+
+    let g3 = next_msg(&mut sub3, Duration::from_millis(1000)).await.expect("d3 delivery");
+    assert_eq!(g3.body, vec!["ONCE".to_string()]);
+    assert_eq!(g3.origin, "d1");
+    assert!(next_msg(&mut sub3, Duration::from_millis(300)).await.is_none(), "d3 got a duplicate");
 }

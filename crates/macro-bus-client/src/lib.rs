@@ -348,3 +348,196 @@ fn split_status(line: &str) -> Result<(Code, String), ClientError> {
     let text = line.get(4..).unwrap_or("").to_string();
     Ok((code, text))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncWriteExt, DuplexStream};
+
+    #[test]
+    fn split_status_parsing() {
+        assert_eq!(split_status("210 ok").unwrap(), (210, "ok".to_string()));
+        assert_eq!(split_status("221").unwrap(), (221, String::new()));
+        assert!(matches!(split_status("ab").unwrap_err(), ClientError::Protocol(_)));
+        assert!(matches!(split_status("xyz foo").unwrap_err(), ClientError::Protocol(_)));
+    }
+
+    /// Spawn a scripted "server" that writes `script` (starting with a greeting)
+    /// and then holds the connection until `hold` is done, returning a connected
+    /// client. The server ignores anything the client sends.
+    async fn scripted(script: &'static [u8], keep_open: bool) -> Client<DuplexStream> {
+        let (client_io, mut server_io) = tokio::io::duplex(8192);
+        tokio::spawn(async move {
+            server_io.write_all(script).await.unwrap();
+            server_io.flush().await.unwrap();
+            if keep_open {
+                // Keep the write half alive so the client doesn't see EOF.
+                std::future::pending::<()>().await;
+            }
+            // else: drop server_io -> client sees Closed.
+        });
+        Client::from_stream(client_io).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn greeting_records_daemon_id() {
+        let c = scripted(b"200 dz macro-bus MBP/1.0 ready\r\n", true).await;
+        assert_eq!(c.daemon_id(), "dz");
+    }
+
+    #[tokio::test]
+    async fn greeting_error_is_surfaced() {
+        let (client_io, mut server_io) = tokio::io::duplex(1024);
+        tokio::spawn(async move {
+            server_io.write_all(b"400 service not available\r\n").await.unwrap();
+            server_io.flush().await.unwrap();
+            std::future::pending::<()>().await;
+        });
+        match Client::from_stream(client_io).await {
+            Err(ClientError::Server { code, .. }) => assert_eq!(code, 400),
+            Err(e) => panic!("expected 400, got error {e:?}"),
+            Ok(_) => panic!("expected 400, got a connected client"),
+        }
+    }
+
+    #[tokio::test]
+    async fn message_push_is_parsed_and_unstuffed() {
+        let mut c = scripted(
+            b"200 d macro-bus MBP/1.0 ready\r\n\
+              101 MSG t abc d\r\nline1\r\n..dot\r\n.\r\n",
+            true,
+        )
+        .await;
+        match c.next_event().await.unwrap() {
+            Event::Message(m) => {
+                assert_eq!(m.type_name, "t");
+                assert_eq!(m.msg_id, "abc");
+                assert_eq!(m.origin, "d");
+                assert_eq!(m.body, vec!["line1".to_string(), ".dot".to_string()]);
+            }
+            other => panic!("expected message, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn drop_and_note_pushes() {
+        let mut c = scripted(
+            b"200 d macro-bus MBP/1.0 ready\r\n\
+              102 DROP sensors.temp 37\r\n\
+              190 NOTE peer d2 up\r\n",
+            true,
+        )
+        .await;
+        assert_eq!(
+            c.next_event().await.unwrap(),
+            Event::Drop { type_name: "sensors.temp".into(), count: 37 }
+        );
+        assert_eq!(c.next_event().await.unwrap(), Event::Note("peer d2 up".into()));
+    }
+
+    #[tokio::test]
+    async fn non_1xx_while_awaiting_push_is_protocol_error() {
+        let mut c = scripted(
+            b"200 d macro-bus MBP/1.0 ready\r\n250 unexpected\r\n",
+            true,
+        )
+        .await;
+        assert!(matches!(c.next_event().await, Err(ClientError::Protocol(_))));
+    }
+
+    #[tokio::test]
+    async fn closed_connection_reports_closed() {
+        let mut c = scripted(b"200 d macro-bus MBP/1.0 ready\r\n", false).await;
+        assert!(matches!(c.next_event().await, Err(ClientError::Closed)));
+    }
+
+    #[tokio::test]
+    async fn command_error_mapped_to_server_error() {
+        let mut c = scripted(
+            b"200 d macro-bus MBP/1.0 ready\r\n433 t already registered\r\n",
+            true,
+        )
+        .await;
+        match c.register("t", "k").await {
+            Err(ClientError::Server { code, text }) => {
+                assert_eq!(code, 433);
+                assert!(text.contains("already registered"));
+            }
+            other => panic!("expected server error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn simple_command_acks() {
+        // subscribe / unsubscribe / quit happy paths.
+        let mut c = scripted(
+            b"200 d macro-bus MBP/1.0 ready\r\n\
+              211 subscribed t\r\n\
+              212 unsubscribed t\r\n\
+              221 closing connection\r\n",
+            true,
+        )
+        .await;
+        c.subscribe("t").await.unwrap();
+        c.unsubscribe("t").await.unwrap();
+        c.quit().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn list_and_help_and_capabilities_blocks() {
+        let mut c = scripted(
+            b"200 d macro-bus MBP/1.0 ready\r\n\
+              215 type list follows\r\na.t\r\nb.t\r\n.\r\n\
+              231 help follows\r\nHELP line\r\n.\r\n\
+              231 capabilities follow\r\nVERSION MBP/1.0\r\n.\r\n",
+            true,
+        )
+        .await;
+        assert_eq!(c.list_types().await.unwrap(), vec!["a.t".to_string(), "b.t".to_string()]);
+        assert_eq!(c.help().await.unwrap(), vec!["HELP line".to_string()]);
+        assert_eq!(c.capabilities().await.unwrap(), vec!["VERSION MBP/1.0".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn publish_body_then_ack() {
+        // 354 invitation, then (after body) 250.
+        let mut c = scripted(
+            b"200 d macro-bus MBP/1.0 ready\r\n\
+              354 enter body\r\n250 message accepted\r\n",
+            true,
+        )
+        .await;
+        c.publish("t", "k", &[".dotted", "plain"]).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn publish_precheck_error_instead_of_354() {
+        let mut c = scripted(
+            b"200 d macro-bus MBP/1.0 ready\r\n441 authorization key mismatch\r\n",
+            true,
+        )
+        .await;
+        match c.publish("t", "wrong", &["x"]).await {
+            Err(ClientError::Server { code, .. }) => assert_eq!(code, 441),
+            other => panic!("expected 441, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn push_buffered_during_command_is_returned_by_next_event() {
+        // A 101 push arrives before the command reply; the reply must still be
+        // matched, and the push returned afterwards.
+        let mut c = scripted(
+            b"200 d macro-bus MBP/1.0 ready\r\n\
+              101 MSG t id1 d\r\nhi\r\n.\r\n\
+              211 subscribed t\r\n",
+            true,
+        )
+        .await;
+        c.subscribe("t").await.unwrap();
+        match c.next_event().await.unwrap() {
+            Event::Message(m) => assert_eq!(m.body, vec!["hi".to_string()]),
+            other => panic!("expected buffered message, got {other:?}"),
+        }
+    }
+}

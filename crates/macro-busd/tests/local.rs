@@ -309,6 +309,30 @@ async fn slow_consumer_tail_drop_notice() {
 }
 
 #[tokio::test]
+async fn oversized_message_is_rejected_452() {
+    // Cap total body at 32 octets; publish a larger body.
+    let h = Harness::start_with("d1", |l| {
+        l.max_message_bytes = 32;
+    });
+    let mut c = h.connect().await;
+    c.send("REGISTER t k").await;
+    assert_eq!(c.read_status().await.0, 210);
+    c.send("PUBLISH t k").await;
+    assert_eq!(c.read_status().await.0, 354);
+    // Send several lines that together exceed the cap, then terminate.
+    for _ in 0..5 {
+        c.send("0123456789").await;
+    }
+    c.send(".").await;
+    assert_eq!(c.read_status().await.0, 452);
+
+    // The connection is still framed and usable after the 452.
+    c.send("LIST TYPES").await;
+    assert_eq!(c.read_status().await.0, 215);
+    let _ = c.read_block().await;
+}
+
+#[tokio::test]
 async fn quit_closes_connection() {
     let h = Harness::start("d1");
     let mut c = h.connect().await;

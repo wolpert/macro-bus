@@ -457,4 +457,44 @@ mod tests {
         assert_eq!(parse_greeting_id("400 nope"), None);
         assert_eq!(parse_greeting_id("garbage"), None);
     }
+
+    #[tokio::test]
+    async fn read_line_handles_crlf_lf_and_eof() {
+        let data: &[u8] = b"first\r\nsecond\nthird";
+        let mut br = BufReader::new(data);
+        assert_eq!(read_line(&mut br).await.unwrap().as_deref(), Some("first"));
+        assert_eq!(read_line(&mut br).await.unwrap().as_deref(), Some("second"));
+        // No trailing newline: the last chunk is still returned...
+        assert_eq!(read_line(&mut br).await.unwrap().as_deref(), Some("third"));
+        // ...then EOF.
+        assert_eq!(read_line(&mut br).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn read_body_unstuffs_and_terminates() {
+        let data: &[u8] = b"line1\r\n..dotted\r\nplain\r\n.\r\ntrailing";
+        let mut br = BufReader::new(data);
+        let body = read_body(&mut br, 1_000_000).await.unwrap();
+        assert_eq!(
+            body,
+            Some(vec!["line1".to_string(), ".dotted".to_string(), "plain".to_string()])
+        );
+        // The reader stops at the terminator; trailing bytes remain.
+        assert_eq!(read_line(&mut br).await.unwrap().as_deref(), Some("trailing"));
+    }
+
+    #[tokio::test]
+    async fn read_body_oversize_is_dropped() {
+        // Two 10-byte lines but a 15-byte cap -> None (drained to terminator).
+        let data: &[u8] = b"aaaaaaaaaa\r\nbbbbbbbbbb\r\n.\r\n";
+        let mut br = BufReader::new(data);
+        assert_eq!(read_body(&mut br, 15).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn read_body_eof_mid_body_errors() {
+        let data: &[u8] = b"line-without-terminator\r\n";
+        let mut br = BufReader::new(data);
+        assert!(read_body(&mut br, 1_000_000).await.is_err());
+    }
 }

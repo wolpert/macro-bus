@@ -251,4 +251,62 @@ mod tests {
         .unwrap();
         assert!(cfg.validate().is_err());
     }
+
+    #[test]
+    fn validate_rejects_empty_id_and_zero_queue() {
+        let mut cfg = Config::default();
+        cfg.server.daemon_id = String::new();
+        assert!(cfg.validate().is_err());
+
+        let mut cfg = Config::default();
+        cfg.limits.queue_depth = 0;
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn peers_without_tls_is_rejected() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [[cluster.peers]]
+            id = "d2"
+            addr = "127.0.0.1:9441"
+        "#,
+        )
+        .unwrap();
+        assert!(cfg.federation_enabled());
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn load_from_file_roundtrips() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("mb-cfg-{}.toml", std::process::id()));
+        std::fs::write(
+            &path,
+            r#"
+            [server]
+            daemon_id = "loaded"
+            socket_path = "/tmp/loaded.sock"
+        "#,
+        )
+        .unwrap();
+        let cfg = Config::load(&path).unwrap();
+        assert_eq!(cfg.server.daemon_id, "loaded");
+        assert_eq!(cfg.server.socket_path, PathBuf::from("/tmp/loaded.sock"));
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn load_missing_file_errors() {
+        let path = std::env::temp_dir().join("mb-cfg-does-not-exist.toml");
+        assert!(Config::load(&path).is_err());
+    }
+
+    #[test]
+    fn load_invalid_toml_errors() {
+        let path = std::env::temp_dir().join(format!("mb-bad-{}.toml", std::process::id()));
+        std::fs::write(&path, "this is = = not valid toml [[[").unwrap();
+        assert!(Config::load(&path).is_err());
+        std::fs::remove_file(&path).ok();
+    }
 }
