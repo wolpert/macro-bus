@@ -31,7 +31,7 @@ rustls-pemfile = "2"
 
 # Config / serde
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
+toml = "1.1"
 
 # CLI
 clap = { version = "4", features = ["derive"] }
