@@ -56,7 +56,10 @@ pub struct ParseError {
 
 impl ParseError {
     fn new(code: Code, reason: impl Into<String>) -> Self {
-        ParseError { code, reason: reason.into() }
+        ParseError {
+            code,
+            reason: reason.into(),
+        }
     }
 }
 
@@ -115,9 +118,15 @@ pub fn parse(line: &str) -> Result<Command, ParseError> {
             if rest.eq_ignore_ascii_case("TYPES") {
                 Ok(Command::ListTypes)
             } else if rest.is_empty() {
-                Err(ParseError::new(status::SYNTAX_PARAMS, "LIST requires a sub-command (TYPES)"))
+                Err(ParseError::new(
+                    status::SYNTAX_PARAMS,
+                    "LIST requires a sub-command (TYPES)",
+                ))
             } else {
-                Err(ParseError::new(status::NOT_IMPLEMENTED, "only LIST TYPES is supported"))
+                Err(ParseError::new(
+                    status::NOT_IMPLEMENTED,
+                    "only LIST TYPES is supported",
+                ))
             }
         }
         _ => Err(ParseError::new(status::SYNTAX, "command unrecognized")),
@@ -128,7 +137,10 @@ fn expect_no_args(rest: &str, cmd: Command) -> Result<Command, ParseError> {
     if rest.trim().is_empty() {
         Ok(cmd)
     } else {
-        Err(ParseError::new(status::SYNTAX_PARAMS, "command takes no arguments"))
+        Err(ParseError::new(
+            status::SYNTAX_PARAMS,
+            "command takes no arguments",
+        ))
     }
 }
 
@@ -162,7 +174,10 @@ fn check_type(t: &str) -> Result<(), ParseError> {
     if validate::is_valid_type(t) {
         Ok(())
     } else {
-        Err(ParseError::new(status::INVALID_TYPE, "invalid message type name"))
+        Err(ParseError::new(
+            status::INVALID_TYPE,
+            "invalid message type name",
+        ))
     }
 }
 
@@ -170,7 +185,10 @@ fn check_key(k: &str) -> Result<(), ParseError> {
     if validate::is_valid_key(k) {
         Ok(())
     } else {
-        Err(ParseError::new(status::SYNTAX_PARAMS, "invalid authorization key"))
+        Err(ParseError::new(
+            status::SYNTAX_PARAMS,
+            "invalid authorization key",
+        ))
     }
 }
 
@@ -191,7 +209,10 @@ mod tests {
     fn commands_are_case_insensitive_args_are_not() {
         assert_eq!(
             parse("register Sensors.Temp S3cr3t").unwrap(),
-            Command::Register { type_name: "Sensors.Temp".into(), key: "S3cr3t".into() }
+            Command::Register {
+                type_name: "Sensors.Temp".into(),
+                key: "S3cr3t".into()
+            }
         );
         // A different-cased type is a distinct type.
         assert_ne!(
@@ -204,31 +225,58 @@ mod tests {
     fn register_and_publish_shapes() {
         assert_eq!(
             parse("PUBLISH a.b key1").unwrap(),
-            Command::Publish { type_name: "a.b".into(), key: "key1".into() }
+            Command::Publish {
+                type_name: "a.b".into(),
+                key: "key1".into()
+            }
         );
         assert_eq!(
             parse("SUBSCRIBE a.b").unwrap(),
-            Command::Subscribe { type_name: "a.b".into() }
+            Command::Subscribe {
+                type_name: "a.b".into()
+            }
         );
         assert_eq!(
             parse("UNSUBSCRIBE a.b").unwrap(),
-            Command::Unsubscribe { type_name: "a.b".into() }
+            Command::Unsubscribe {
+                type_name: "a.b".into()
+            }
         );
     }
 
     #[test]
     fn tolerates_surrounding_and_internal_whitespace() {
-        assert_eq!(parse("  SUBSCRIBE   a.b  ").unwrap(), Command::Subscribe { type_name: "a.b".into() });
-        assert_eq!(parse("REGISTER   a.b   k").unwrap(), Command::Register { type_name: "a.b".into(), key: "k".into() });
+        assert_eq!(
+            parse("  SUBSCRIBE   a.b  ").unwrap(),
+            Command::Subscribe {
+                type_name: "a.b".into()
+            }
+        );
+        assert_eq!(
+            parse("REGISTER   a.b   k").unwrap(),
+            Command::Register {
+                type_name: "a.b".into(),
+                key: "k".into()
+            }
+        );
     }
 
     #[test]
     fn rejects_bad_arity() {
         assert_eq!(parse("SUBSCRIBE").unwrap_err().code, status::SYNTAX_PARAMS);
-        assert_eq!(parse("SUBSCRIBE a b").unwrap_err().code, status::SYNTAX_PARAMS);
+        assert_eq!(
+            parse("SUBSCRIBE a b").unwrap_err().code,
+            status::SYNTAX_PARAMS
+        );
         assert_eq!(parse("REGISTER a").unwrap_err().code, status::SYNTAX_PARAMS);
-        assert_eq!(parse("REGISTER a b c").unwrap_err().code, status::SYNTAX_PARAMS);
-        assert_eq!(parse("CAPABILITIES x").unwrap_err().code, status::SYNTAX_PARAMS);
+        assert_eq!(
+            parse("REGISTER a b c").unwrap_err().code,
+            status::SYNTAX_PARAMS
+        );
+        assert_eq!(
+            parse("CAPABILITIES x").unwrap_err().code,
+            status::SYNTAX_PARAMS
+        );
     }
 
     #[test]
@@ -239,14 +287,26 @@ mod tests {
 
     #[test]
     fn rejects_invalid_type_name() {
-        assert_eq!(parse("SUBSCRIBE bad name").unwrap_err().code, status::SYNTAX_PARAMS); // too many args
-        assert_eq!(parse("SUBSCRIBE bad!name").unwrap_err().code, status::INVALID_TYPE);
-        assert_eq!(parse("REGISTER bad!name k").unwrap_err().code, status::INVALID_TYPE);
+        assert_eq!(
+            parse("SUBSCRIBE bad name").unwrap_err().code,
+            status::SYNTAX_PARAMS
+        ); // too many args
+        assert_eq!(
+            parse("SUBSCRIBE bad!name").unwrap_err().code,
+            status::INVALID_TYPE
+        );
+        assert_eq!(
+            parse("REGISTER bad!name k").unwrap_err().code,
+            status::INVALID_TYPE
+        );
     }
 
     #[test]
     fn list_variants() {
         assert_eq!(parse("LIST").unwrap_err().code, status::SYNTAX_PARAMS);
-        assert_eq!(parse("LIST FROBS").unwrap_err().code, status::NOT_IMPLEMENTED);
+        assert_eq!(
+            parse("LIST FROBS").unwrap_err().code,
+            status::NOT_IMPLEMENTED
+        );
     }
 }

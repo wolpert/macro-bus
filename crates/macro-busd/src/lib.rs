@@ -30,7 +30,10 @@ pub fn build_registry(cfg: &Config) -> Arc<Registry> {
 
 /// Run a daemon to completion: bind the local socket, start federation (if
 /// configured), and serve until `shutdown` resolves.
-pub async fn run(cfg: Config, shutdown: impl std::future::Future<Output = ()>) -> anyhow::Result<()> {
+pub async fn run(
+    cfg: Config,
+    shutdown: impl std::future::Future<Output = ()>,
+) -> anyhow::Result<()> {
     cfg.validate()?;
     let registry = build_registry(&cfg);
 

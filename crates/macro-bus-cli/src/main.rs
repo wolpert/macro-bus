@@ -72,7 +72,11 @@ async fn main() -> anyhow::Result<()> {
             println!("registered {type_name}");
             let _ = c.quit().await;
         }
-        Command::Publish { type_name, key, message } => {
+        Command::Publish {
+            type_name,
+            key,
+            message,
+        } => {
             let body_text = match message {
                 Some(m) => m,
                 None => {

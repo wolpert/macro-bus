@@ -142,9 +142,7 @@ impl Config {
         if self.server.daemon_id.is_empty() {
             anyhow::bail!("server.daemon_id must not be empty");
         }
-        if (!self.cluster.peers.is_empty() || self.cluster.listen.is_some())
-            && self.tls.is_none()
-        {
+        if (!self.cluster.peers.is_empty() || self.cluster.listen.is_some()) && self.tls.is_none() {
             anyhow::bail!("cluster federation requires a [tls] section (cert/key/ca)");
         }
         if self.limits.queue_depth == 0 {

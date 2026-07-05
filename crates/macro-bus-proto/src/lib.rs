@@ -32,12 +32,22 @@ pub const DEFAULT_SOCKET_PATH: &str = "/var/run/macro-bus.sock";
 
 /// The client-facing greeting line (without trailing CRLF) for a given daemon.
 pub fn greeting(daemon_id: &str) -> String {
-    format!("{} {} macro-bus {} ready", status::SERVICE_READY, daemon_id, PROTOCOL_ID)
+    format!(
+        "{} {} macro-bus {} ready",
+        status::SERVICE_READY,
+        daemon_id,
+        PROTOCOL_ID
+    )
 }
 
 /// The federation-link greeting line (without trailing CRLF) for a given daemon.
 pub fn peer_greeting(daemon_id: &str) -> String {
-    format!("{} {} macro-bus-peer {} ready", status::SERVICE_READY, daemon_id, PROTOCOL_ID)
+    format!(
+        "{} {} macro-bus-peer {} ready",
+        status::SERVICE_READY,
+        daemon_id,
+        PROTOCOL_ID
+    )
 }
 
 #[cfg(test)]

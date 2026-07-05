@@ -157,7 +157,10 @@ where
         // Expect the 354 body invitation (errors like 430/441 come here instead).
         let resp = self.read_response().await?;
         if resp.code != status::START_BODY {
-            return Err(ClientError::Server { code: resp.code, text: resp.text });
+            return Err(ClientError::Server {
+                code: resp.code,
+                text: resp.text,
+            });
         }
         let lines: Vec<String> = body.iter().map(|l| l.as_ref().to_string()).collect();
         let block = frame::encode_body(&lines);
@@ -243,7 +246,11 @@ where
             } else {
                 None
             };
-            return Ok(Response { code, text: rest, block });
+            return Ok(Response {
+                code,
+                text: rest,
+                block,
+            });
         }
     }
 
@@ -254,7 +261,10 @@ where
         if resp.code == expected {
             Ok(resp)
         } else {
-            Err(ClientError::Server { code: resp.code, text: resp.text })
+            Err(ClientError::Server {
+                code: resp.code,
+                text: resp.text,
+            })
         }
     }
 
@@ -273,10 +283,14 @@ where
                 let msg_id = it.next().unwrap_or("").to_string();
                 let origin = it.next().unwrap_or("").to_string();
                 if type_name.is_empty() || msg_id.is_empty() || origin.is_empty() {
-                    return Err(ClientError::Protocol(format!("incomplete 101 header: {rest}")));
+                    return Err(ClientError::Protocol(format!(
+                        "incomplete 101 header: {rest}"
+                    )));
                 }
                 let body = self.read_block().await?;
-                Ok(Event::Message(Message::new(type_name, msg_id, origin, body)))
+                Ok(Event::Message(Message::new(
+                    type_name, msg_id, origin, body,
+                )))
             }
             status::DROP => {
                 // "DROP <type> <count>"
@@ -340,7 +354,9 @@ where
 /// Split `"<code> <text>"` into `(code, text)`.
 fn split_status(line: &str) -> Result<(Code, String), ClientError> {
     if line.len() < 3 {
-        return Err(ClientError::Protocol(format!("short response line: {line:?}")));
+        return Err(ClientError::Protocol(format!(
+            "short response line: {line:?}"
+        )));
     }
     let code: Code = line[..3]
         .parse()
@@ -358,8 +374,14 @@ mod tests {
     fn split_status_parsing() {
         assert_eq!(split_status("210 ok").unwrap(), (210, "ok".to_string()));
         assert_eq!(split_status("221").unwrap(), (221, String::new()));
-        assert!(matches!(split_status("ab").unwrap_err(), ClientError::Protocol(_)));
-        assert!(matches!(split_status("xyz foo").unwrap_err(), ClientError::Protocol(_)));
+        assert!(matches!(
+            split_status("ab").unwrap_err(),
+            ClientError::Protocol(_)
+        ));
+        assert!(matches!(
+            split_status("xyz foo").unwrap_err(),
+            ClientError::Protocol(_)
+        ));
     }
 
     /// Spawn a scripted "server" that writes `script` (starting with a greeting)
@@ -389,7 +411,10 @@ mod tests {
     async fn greeting_error_is_surfaced() {
         let (client_io, mut server_io) = tokio::io::duplex(1024);
         tokio::spawn(async move {
-            server_io.write_all(b"400 service not available\r\n").await.unwrap();
+            server_io
+                .write_all(b"400 service not available\r\n")
+                .await
+                .unwrap();
             server_io.flush().await.unwrap();
             std::future::pending::<()>().await;
         });
@@ -430,19 +455,24 @@ mod tests {
         .await;
         assert_eq!(
             c.next_event().await.unwrap(),
-            Event::Drop { type_name: "sensors.temp".into(), count: 37 }
+            Event::Drop {
+                type_name: "sensors.temp".into(),
+                count: 37
+            }
         );
-        assert_eq!(c.next_event().await.unwrap(), Event::Note("peer d2 up".into()));
+        assert_eq!(
+            c.next_event().await.unwrap(),
+            Event::Note("peer d2 up".into())
+        );
     }
 
     #[tokio::test]
     async fn non_1xx_while_awaiting_push_is_protocol_error() {
-        let mut c = scripted(
-            b"200 d macro-bus MBP/1.0 ready\r\n250 unexpected\r\n",
-            true,
-        )
-        .await;
-        assert!(matches!(c.next_event().await, Err(ClientError::Protocol(_))));
+        let mut c = scripted(b"200 d macro-bus MBP/1.0 ready\r\n250 unexpected\r\n", true).await;
+        assert!(matches!(
+            c.next_event().await,
+            Err(ClientError::Protocol(_))
+        ));
     }
 
     #[tokio::test]
@@ -493,9 +523,15 @@ mod tests {
             true,
         )
         .await;
-        assert_eq!(c.list_types().await.unwrap(), vec!["a.t".to_string(), "b.t".to_string()]);
+        assert_eq!(
+            c.list_types().await.unwrap(),
+            vec!["a.t".to_string(), "b.t".to_string()]
+        );
         assert_eq!(c.help().await.unwrap(), vec!["HELP line".to_string()]);
-        assert_eq!(c.capabilities().await.unwrap(), vec!["VERSION MBP/1.0".to_string()]);
+        assert_eq!(
+            c.capabilities().await.unwrap(),
+            vec!["VERSION MBP/1.0".to_string()]
+        );
     }
 
     #[tokio::test]

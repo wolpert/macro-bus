@@ -48,7 +48,10 @@ impl Harness {
             let _ = rx.await;
         }));
 
-        Harness { socket, _shutdown: tx }
+        Harness {
+            socket,
+            _shutdown: tx,
+        }
     }
 
     async fn connect(&self) -> RawClient {
@@ -58,7 +61,9 @@ impl Harness {
         for _ in 0..50 {
             match UnixStream::connect(&self.socket).await {
                 Ok(s) => {
-                    let mut c = RawClient { io: BufReader::new(s) };
+                    let mut c = RawClient {
+                        io: BufReader::new(s),
+                    };
                     // Consume the greeting.
                     let banner = c.read_line().await;
                     assert!(banner.starts_with("200 "), "greeting was {banner:?}");
@@ -99,7 +104,9 @@ impl RawClient {
     /// Read the numeric status code of the next line and the whole line.
     async fn read_status(&mut self) -> (u16, String) {
         let line = self.read_line().await;
-        let code = line[..3].parse().unwrap_or_else(|_| panic!("no code in {line:?}"));
+        let code = line[..3]
+            .parse()
+            .unwrap_or_else(|_| panic!("no code in {line:?}"));
         (code, line)
     }
 
@@ -143,8 +150,14 @@ async fn publish_subscribe_delivery() {
     // Subscriber receives the async push.
     let (code, header) = subc.read_status().await;
     assert_eq!(code, 101);
-    assert!(header.starts_with("101 MSG sensors.temp "), "header: {header}");
-    assert!(header.ends_with(" d-test"), "origin daemon in header: {header}");
+    assert!(
+        header.starts_with("101 MSG sensors.temp "),
+        "header: {header}"
+    );
+    assert!(
+        header.ends_with(" d-test"),
+        "origin daemon in header: {header}"
+    );
     let body = subc.read_block().await;
     assert_eq!(body, vec!["21.4C".to_string()]);
 }
@@ -170,7 +183,14 @@ async fn dot_stuffed_multiline_body_roundtrips() {
 
     assert_eq!(subc.read_status().await.0, 101);
     let body = subc.read_block().await;
-    assert_eq!(body, vec!["line one".to_string(), ".dotted".to_string(), "plain".to_string()]);
+    assert_eq!(
+        body,
+        vec![
+            "line one".to_string(),
+            ".dotted".to_string(),
+            "plain".to_string()
+        ]
+    );
 }
 
 #[tokio::test]
@@ -366,5 +386,8 @@ async fn unsubscribe_stops_delivery() {
     // A read on the (now-unsubscribed) connection must time out — nothing is
     // delivered. 250 ms is ample given delivery is otherwise immediate.
     let got = tokio::time::timeout(std::time::Duration::from_millis(250), subc.read_line()).await;
-    assert!(got.is_err(), "unsubscribed connection unexpectedly received: {got:?}");
+    assert!(
+        got.is_err(),
+        "unsubscribed connection unexpectedly received: {got:?}"
+    );
 }

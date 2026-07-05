@@ -25,8 +25,8 @@ pub fn ensure_crypto_provider() {
 }
 
 fn load_certs(path: &std::path::Path) -> anyhow::Result<Vec<CertificateDer<'static>>> {
-    let data = std::fs::read(path)
-        .map_err(|e| anyhow::anyhow!("reading cert {}: {e}", path.display()))?;
+    let data =
+        std::fs::read(path).map_err(|e| anyhow::anyhow!("reading cert {}: {e}", path.display()))?;
     let mut reader = BufReader::new(&data[..]);
     let certs: Result<Vec<_>, _> = rustls_pemfile::certs(&mut reader).collect();
     let certs = certs.map_err(|e| anyhow::anyhow!("parsing certs {}: {e}", path.display()))?;
@@ -37,8 +37,8 @@ fn load_certs(path: &std::path::Path) -> anyhow::Result<Vec<CertificateDer<'stat
 }
 
 fn load_key(path: &std::path::Path) -> anyhow::Result<PrivateKeyDer<'static>> {
-    let data = std::fs::read(path)
-        .map_err(|e| anyhow::anyhow!("reading key {}: {e}", path.display()))?;
+    let data =
+        std::fs::read(path).map_err(|e| anyhow::anyhow!("reading key {}: {e}", path.display()))?;
     let mut reader = BufReader::new(&data[..]);
     let key = rustls_pemfile::private_key(&mut reader)
         .map_err(|e| anyhow::anyhow!("parsing key {}: {e}", path.display()))?;
