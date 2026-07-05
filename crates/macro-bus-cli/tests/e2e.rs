@@ -168,7 +168,7 @@ fn end_to_end_standalone_real_binaries() {
 fn gen_cert(id: &str) -> (PathBuf, PathBuf, String) {
     let ck = rcgen::generate_simple_self_signed(vec![id.to_string()]).unwrap();
     let cert_pem = ck.cert.pem();
-    let key_pem = ck.key_pair.serialize_pem();
+    let key_pem = ck.signing_key.serialize_pem();
     let cert = tmp(&format!("{id}.crt"));
     let key = tmp(&format!("{id}.key"));
     std::fs::write(&cert, &cert_pem).unwrap();
