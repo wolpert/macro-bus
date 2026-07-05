@@ -45,7 +45,7 @@ anyhow = "1"
 thiserror = "1"
 
 # Test-only cert generation
-rcgen = "0.13"
+rcgen = "0.14"
 
 [profile.release]
 lto = "thin"
