@@ -118,6 +118,22 @@ To wire a cluster yourself, give each daemon a config file (see below) with a
 `[cluster]` section listing its peers and a `[tls]` section. Certs can be made
 with [`scripts/gen-certs.sh`](scripts/gen-certs.sh).
 
+## Tests
+
+```sh
+cargo test --workspace      # unit + integration + end-to-end
+```
+
+- **Unit** tests cover the protocol parser/serializer, framing, the auth
+  registry and its conflict rule, TLS config loading, and the client codec.
+- **Integration** tests (`crates/macro-busd/tests/`) drive an in-process daemon
+  over a real socket: local publish→subscribe, auth rejection, slow-consumer
+  tail-drop, and a **2-node and 3-node mutual-TLS cluster** proving cross-node
+  forwarding with loop prevention (exactly-once) and registration propagation.
+- **End-to-end** tests (`crates/macro-bus-cli/tests/e2e.rs`) spawn the *actual
+  compiled `macro-busd` and `macro-bus` binaries* as separate processes and
+  assert on real deliveries — standalone, and a two-daemon TLS cluster.
+
 ## The CLI
 
 ```

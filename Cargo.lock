@@ -234,6 +234,7 @@ dependencies = [
  "clap",
  "macro-bus-client",
  "macro-bus-proto",
+ "rcgen",
  "tokio",
  "tracing",
  "tracing-subscriber",
