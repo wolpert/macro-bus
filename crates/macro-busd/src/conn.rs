@@ -145,7 +145,8 @@ where
                     continue;
                 }
                 LineTake::TooLong => {
-                    self.write_line(status::SYNTAX, "command line too long").await?;
+                    self.write_line(status::SYNTAX, "command line too long")
+                        .await?;
                     return Ok(());
                 }
                 LineTake::Need => {}
@@ -182,7 +183,8 @@ where
 
         match cmd {
             Command::Quit => {
-                self.write_line(status::CLOSING, "closing connection").await?;
+                self.write_line(status::CLOSING, "closing connection")
+                    .await?;
                 return Ok(false);
             }
             Command::Capabilities => self.write_capabilities().await?,
@@ -229,14 +231,18 @@ where
             return Ok(true);
         }
 
-        self.write_line(status::START_BODY, "enter message body; end with <CRLF>.<CRLF>")
-            .await?;
+        self.write_line(
+            status::START_BODY,
+            "enter message body; end with <CRLF>.<CRLF>",
+        )
+        .await?;
 
         let body = match self.read_body().await? {
             Some(b) => b,
             None => {
                 // Body exceeded limits; connection drained to the terminator.
-                self.write_line(status::TOO_LARGE, "message too large").await?;
+                self.write_line(status::TOO_LARGE, "message too large")
+                    .await?;
                 return Ok(true);
             }
         };
@@ -246,7 +252,8 @@ where
                 if let Some(f) = &self.forwarder {
                     f.forward_local(msg);
                 }
-                self.write_line(status::ACCEPTED, "message accepted").await?;
+                self.write_line(status::ACCEPTED, "message accepted")
+                    .await?;
             }
             Err(e) => self.write_line(e.code, &e.reason).await?,
         }
@@ -262,7 +269,10 @@ where
         let mut too_large = false;
 
         loop {
-            let raw = match self.read_line_blocking(self.limits.max_body_line_bytes).await? {
+            let raw = match self
+                .read_line_blocking(self.limits.max_body_line_bytes)
+                .await?
+            {
                 Some(l) => l,
                 None => {
                     // Oversize single line: treat whole body as too large but we
@@ -364,13 +374,15 @@ where
             d.drain().collect()
         };
         for (type_name, count) in pending {
-            self.write_line(status::DROP, &format!("DROP {type_name} {count}")).await?;
+            self.write_line(status::DROP, &format!("DROP {type_name} {count}"))
+                .await?;
         }
         Ok(())
     }
 
     async fn write_capabilities(&mut self) -> std::io::Result<()> {
-        self.write_line(status::INFO_FOLLOWS, "capabilities follow").await?;
+        self.write_line(status::INFO_FOLLOWS, "capabilities follow")
+            .await?;
         let caps = [
             format!("VERSION {PROTOCOL_ID}"),
             format!("MAXMSG {}", self.limits.max_message_bytes),
@@ -390,7 +402,8 @@ where
     }
 
     async fn write_help(&mut self) -> std::io::Result<()> {
-        self.write_line(status::INFO_FOLLOWS, "help follows").await?;
+        self.write_line(status::INFO_FOLLOWS, "help follows")
+            .await?;
         let help = [
             "REGISTER <type> <key>    claim a type (first-registrant wins)",
             "SUBSCRIBE <type>         start receiving a type (no key)",
@@ -412,7 +425,8 @@ where
     }
 
     async fn write_type_list(&mut self) -> std::io::Result<()> {
-        self.write_line(status::TYPE_LIST, "type list follows").await?;
+        self.write_line(status::TYPE_LIST, "type list follows")
+            .await?;
         let types = self.registry.list_types();
         let mut block = String::new();
         for t in types {

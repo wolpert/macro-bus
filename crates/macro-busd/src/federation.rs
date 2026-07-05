@@ -64,7 +64,11 @@ impl OutFrame {
             OutFrame::Rreg { type_name, reg } => {
                 format!(
                     "RREG {} {} {} {}{}",
-                    type_name, reg.key, reg.origin_daemon, reg.ts, frame::CRLF
+                    type_name,
+                    reg.key,
+                    reg.origin_daemon,
+                    reg.ts,
+                    frame::CRLF
                 )
             }
         }
@@ -109,9 +113,9 @@ impl Cluster {
         // Listener for inbound peer links.
         if let Some(listen) = cfg.cluster.listen {
             let acceptor = TlsAcceptor::from(tls::server_config(tls_cfg)?);
-            let listener = TcpListener::bind(listen).await.map_err(|e| {
-                anyhow::anyhow!("binding federation listener on {listen}: {e}")
-            })?;
+            let listener = TcpListener::bind(listen)
+                .await
+                .map_err(|e| anyhow::anyhow!("binding federation listener on {listen}: {e}"))?;
             tracing::info!(%listen, "federation listener bound");
             let me = cluster.clone();
             tokio::spawn(me.run_listener(listener, acceptor));
@@ -182,10 +186,13 @@ impl Cluster {
         let (rd, mut wr) = tokio::io::split(tls);
 
         // Greeting exchange: write ours, read theirs.
-        wr.write_all(format!("{}\r\n", peer_greeting(self.daemon_id())).as_bytes()).await?;
+        wr.write_all(format!("{}\r\n", peer_greeting(self.daemon_id())).as_bytes())
+            .await?;
         wr.flush().await?;
         let mut br = BufReader::new(rd);
-        let greeting = read_line(&mut br).await?.ok_or_else(|| anyhow::anyhow!("peer closed before greeting"))?;
+        let greeting = read_line(&mut br)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("peer closed before greeting"))?;
         let remote_id = parse_greeting_id(&greeting).unwrap_or_else(|| peer.id.clone());
         tracing::info!(peer = %peer.id, remote = %remote_id, "dialed peer link up (mTLS)");
 
@@ -239,10 +246,13 @@ impl Cluster {
         let (rd, mut wr) = tokio::io::split(tls);
 
         // Greeting exchange.
-        wr.write_all(format!("{}\r\n", peer_greeting(self.daemon_id())).as_bytes()).await?;
+        wr.write_all(format!("{}\r\n", peer_greeting(self.daemon_id())).as_bytes())
+            .await?;
         wr.flush().await?;
         let mut br = BufReader::new(rd);
-        let greeting = read_line(&mut br).await?.ok_or_else(|| anyhow::anyhow!("peer closed before greeting"))?;
+        let greeting = read_line(&mut br)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("peer closed before greeting"))?;
         let remote_id = parse_greeting_id(&greeting)
             .ok_or_else(|| anyhow::anyhow!("malformed peer greeting: {greeting}"))?;
         tracing::info!(remote = %remote_id, "accepted peer link up (mTLS)");
@@ -327,10 +337,23 @@ impl Cluster {
             tracing::warn!(peer = %from_peer, "incomplete RREG; dropping");
             return;
         }
-        let incoming = TypeReg { key, origin_daemon: origin, ts };
-        if let Some(effective) = self.registry.apply_remote_registration(&type_name, incoming) {
+        let incoming = TypeReg {
+            key,
+            origin_daemon: origin,
+            ts,
+        };
+        if let Some(effective) = self
+            .registry
+            .apply_remote_registration(&type_name, incoming)
+        {
             // The table changed; propagate the now-effective record onward.
-            self.broadcast(OutFrame::Rreg { type_name, reg: effective }, Some(from_peer));
+            self.broadcast(
+                OutFrame::Rreg {
+                    type_name,
+                    reg: effective,
+                },
+                Some(from_peer),
+            );
         }
     }
 }
@@ -379,7 +402,10 @@ where
 
 /// Read a dot-terminated DATA body, un-stuffing lines. Enforces `max_bytes`
 /// (oversize bodies are drained to the terminator then reported empty-dropped).
-async fn read_body<R>(br: &mut BufReader<R>, max_bytes: usize) -> std::io::Result<Option<Vec<String>>>
+async fn read_body<R>(
+    br: &mut BufReader<R>,
+    max_bytes: usize,
+) -> std::io::Result<Option<Vec<String>>>
 where
     R: AsyncRead + Unpin,
 {
@@ -437,7 +463,12 @@ mod tests {
 
     #[test]
     fn feed_frame_wire_format() {
-        let msg = Arc::new(Message::new("sensors.temp", "d1-a", "d1", vec!["21.4C".into(), ".dot".into()]));
+        let msg = Arc::new(Message::new(
+            "sensors.temp",
+            "d1-a",
+            "d1",
+            vec!["21.4C".into(), ".dot".into()],
+        ));
         let wire = OutFrame::Feed(msg).serialize();
         assert_eq!(wire, "FEED sensors.temp d1-a d1\r\n21.4C\r\n..dot\r\n.\r\n");
     }
@@ -446,14 +477,21 @@ mod tests {
     fn rreg_frame_wire_format() {
         let f = OutFrame::Rreg {
             type_name: "t".into(),
-            reg: TypeReg { key: "k".into(), origin_daemon: "d1".into(), ts: 42 },
+            reg: TypeReg {
+                key: "k".into(),
+                origin_daemon: "d1".into(),
+                ts: 42,
+            },
         };
         assert_eq!(f.serialize(), "RREG t k d1 42\r\n");
     }
 
     #[test]
     fn greeting_id_parsing() {
-        assert_eq!(parse_greeting_id("200 d1 macro-bus-peer MBP/1.0 ready").as_deref(), Some("d1"));
+        assert_eq!(
+            parse_greeting_id("200 d1 macro-bus-peer MBP/1.0 ready").as_deref(),
+            Some("d1")
+        );
         assert_eq!(parse_greeting_id("400 nope"), None);
         assert_eq!(parse_greeting_id("garbage"), None);
     }
@@ -477,10 +515,17 @@ mod tests {
         let body = read_body(&mut br, 1_000_000).await.unwrap();
         assert_eq!(
             body,
-            Some(vec!["line1".to_string(), ".dotted".to_string(), "plain".to_string()])
+            Some(vec![
+                "line1".to_string(),
+                ".dotted".to_string(),
+                "plain".to_string()
+            ])
         );
         // The reader stops at the terminator; trailing bytes remain.
-        assert_eq!(read_line(&mut br).await.unwrap().as_deref(), Some("trailing"));
+        assert_eq!(
+            read_line(&mut br).await.unwrap().as_deref(),
+            Some("trailing")
+        );
     }
 
     #[tokio::test]

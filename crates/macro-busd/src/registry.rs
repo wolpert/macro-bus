@@ -95,7 +95,11 @@ struct SeenSet {
 
 impl SeenSet {
     fn new(cap: usize) -> Self {
-        SeenSet { cap: cap.max(1), set: HashSet::new(), order: VecDeque::new() }
+        SeenSet {
+            cap: cap.max(1),
+            set: HashSet::new(),
+            order: VecDeque::new(),
+        }
     }
 
     /// Insert `id`. Returns `true` if it was newly inserted (i.e. NOT seen
@@ -146,7 +150,10 @@ impl Registry {
         Registry {
             daemon_id: daemon_id.into(),
             seq: AtomicU64::new(1),
-            inner: Mutex::new(Inner { types: HashMap::new(), subs: HashMap::new() }),
+            inner: Mutex::new(Inner {
+                types: HashMap::new(),
+                subs: HashMap::new(),
+            }),
             seen: Mutex::new(SeenSet::new(seen_capacity)),
         }
     }
@@ -183,9 +190,10 @@ impl Registry {
                 inner.types.insert(type_name.to_string(), reg.clone());
                 Ok(Registered { reg, changed: true })
             }
-            Some(existing) if existing.key == key => {
-                Ok(Registered { reg: existing.clone(), changed: false })
-            }
+            Some(existing) if existing.key == key => Ok(Registered {
+                reg: existing.clone(),
+                changed: false,
+            }),
             Some(_) => Err(RegisterError {
                 code: status::ALREADY_REGISTERED,
                 reason: format!("{type_name} already registered"),
@@ -199,11 +207,7 @@ impl Registry {
     /// Returns `Some(reg)` with the now-effective record if the local table
     /// changed (caller should re-propagate), or `None` if the incoming record
     /// lost / was a duplicate and nothing changed.
-    pub fn apply_remote_registration(
-        &self,
-        type_name: &str,
-        incoming: TypeReg,
-    ) -> Option<TypeReg> {
+    pub fn apply_remote_registration(&self, type_name: &str, incoming: TypeReg) -> Option<TypeReg> {
         let mut inner = self.inner.lock().unwrap();
         match inner.types.get(type_name) {
             None => {
@@ -233,7 +237,11 @@ impl Registry {
     /// peer).
     pub fn all_registrations(&self) -> Vec<(String, TypeReg)> {
         let inner = self.inner.lock().unwrap();
-        inner.types.iter().map(|(t, r)| (t.clone(), r.clone())).collect()
+        inner
+            .types
+            .iter()
+            .map(|(t, r)| (t.clone(), r.clone()))
+            .collect()
     }
 
     /// List known type names (sorted). Keys are never disclosed.
@@ -472,14 +480,22 @@ mod tests {
         let winner = r
             .apply_remote_registration(
                 "t",
-                TypeReg { key: "peerkey".into(), origin_daemon: "d1".into(), ts: 100 },
+                TypeReg {
+                    key: "peerkey".into(),
+                    origin_daemon: "d1".into(),
+                    ts: 100,
+                },
             )
             .expect("incoming wins");
         assert_eq!(winner.key, "peerkey");
         // A later (higher-ts) incoming loses.
         let none = r.apply_remote_registration(
             "t",
-            TypeReg { key: "z".into(), origin_daemon: "d0".into(), ts: 999 },
+            TypeReg {
+                key: "z".into(),
+                origin_daemon: "d0".into(),
+                ts: 999,
+            },
         );
         assert!(none.is_none());
     }

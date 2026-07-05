@@ -27,16 +27,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // "App 1": the responder. Subscribes to pings, replies with pongs.
     let responder_socket = socket.clone();
     let responder = tokio::spawn(async move {
-        let mut sub = Client::connect(&responder_socket).await.expect("connect responder");
+        let mut sub = Client::connect(&responder_socket)
+            .await
+            .expect("connect responder");
         sub.subscribe(PING).await.expect("subscribe ping");
         // A second connection to publish pongs (one task per connection).
-        let mut pubc = Client::connect(&responder_socket).await.expect("connect pub");
+        let mut pubc = Client::connect(&responder_socket)
+            .await
+            .expect("connect pub");
         loop {
             match sub.next_event().await {
                 Ok(Event::Message(m)) => {
                     let who = m.body.first().cloned().unwrap_or_default();
                     println!("[responder] got ping from {who:?}, sending pong");
-                    if pubc.publish(PONG, KEY, &[format!("pong for {who}")]).await.is_err() {
+                    if pubc
+                        .publish(PONG, KEY, &[format!("pong for {who}")])
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }

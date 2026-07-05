@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use tokio::net::UnixListener;
 
-use crate::conn::{Conn, Forwarder};
 use crate::config::Limits;
+use crate::conn::{Conn, Forwarder};
 use crate::registry::Registry;
 
 /// A bound local server, ready to accept clients.

@@ -80,7 +80,10 @@ mod tests {
     #[test]
     fn dotted_body_line_is_stuffed_in_delivery() {
         let m = Message::new("t", "d1-2", "d1", vec![".leading".into()]);
-        assert_eq!(m.encode_delivery(), "101 MSG t d1-2 d1\r\n..leading\r\n.\r\n");
+        assert_eq!(
+            m.encode_delivery(),
+            "101 MSG t d1-2 d1\r\n..leading\r\n.\r\n"
+        );
     }
 
     #[test]

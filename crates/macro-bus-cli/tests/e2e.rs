@@ -109,7 +109,15 @@ fn end_to_end_standalone_real_binaries() {
     std::thread::sleep(Duration::from_millis(600));
 
     // 4. Publish two messages via the CLI: one from --message, one from stdin.
-    cli(&["--socket", s, "publish", "chat.msg", "sekret", "--message", "hello from e2e"]);
+    cli(&[
+        "--socket",
+        s,
+        "publish",
+        "chat.msg",
+        "sekret",
+        "--message",
+        "hello from e2e",
+    ]);
 
     let mut pubc = Command::new(cli_bin())
         .args(["--socket", s, "publish", "chat.msg", "sekret"])
@@ -118,13 +126,20 @@ fn end_to_end_standalone_real_binaries() {
         .stderr(Stdio::null())
         .spawn()
         .expect("spawn publisher");
-    pubc.stdin.take().unwrap().write_all(b"line A\nline B\n").unwrap();
+    pubc.stdin
+        .take()
+        .unwrap()
+        .write_all(b"line A\nline B\n")
+        .unwrap();
     assert!(pubc.wait().unwrap().success());
 
     // 5. LIST TYPES via CLI shows the registered type (no keys).
     let list = cli(&["--socket", s, "list"]);
     assert!(list.contains("chat.msg"), "list said: {list}");
-    assert!(!list.contains("sekret"), "list must never leak keys: {list}");
+    assert!(
+        !list.contains("sekret"),
+        "list must never leak keys: {list}"
+    );
 
     // Let deliveries land, then stop the daemon so the subscriber exits cleanly.
     std::thread::sleep(Duration::from_millis(500));
@@ -134,9 +149,18 @@ fn end_to_end_standalone_real_binaries() {
     let stdout = String::from_utf8_lossy(&out.stdout);
 
     // 6. The subscriber process received both publishes end to end.
-    assert!(stdout.contains("hello from e2e"), "subscriber missed msg 1:\n{stdout}");
-    assert!(stdout.contains("line A") && stdout.contains("line B"), "subscriber missed msg 2:\n{stdout}");
-    assert!(stdout.contains("from e2e"), "delivery header should name origin daemon:\n{stdout}");
+    assert!(
+        stdout.contains("hello from e2e"),
+        "subscriber missed msg 1:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("line A") && stdout.contains("line B"),
+        "subscriber missed msg 2:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("from e2e"),
+        "delivery header should name origin daemon:\n{stdout}"
+    );
 }
 
 // --- two-node cluster over real mutual TLS, real binaries -------------------
@@ -174,7 +198,13 @@ fn end_to_end_cluster_real_binaries() {
     let port1 = free_port();
     let port2 = free_port();
 
-    let write_cfg = |id: &str, sock: &std::path::Path, listen: u16, peer_id: &str, peer_port: u16, cert: &std::path::Path, key: &std::path::Path| {
+    let write_cfg = |id: &str,
+                     sock: &std::path::Path,
+                     listen: u16,
+                     peer_id: &str,
+                     peer_port: u16,
+                     cert: &std::path::Path,
+                     key: &std::path::Path| {
         let path = tmp(&format!("{id}.toml"));
         let body = format!(
             "[server]\ndaemon_id = \"{id}\"\nsocket_path = \"{}\"\n\n\
@@ -193,14 +223,18 @@ fn end_to_end_cluster_real_binaries() {
     let _d1 = DaemonProc(
         Command::new(daemon_bin())
             .args(["--config", cfg1.to_str().unwrap()])
-            .stdout(Stdio::null()).stderr(Stdio::null())
-            .spawn().expect("spawn d1"),
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn d1"),
     );
     let _d2 = DaemonProc(
         Command::new(daemon_bin())
             .args(["--config", cfg2.to_str().unwrap()])
-            .stdout(Stdio::null()).stderr(Stdio::null())
-            .spawn().expect("spawn d2"),
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn d2"),
     );
     wait_for_socket(&sock1, Duration::from_secs(5));
     wait_for_socket(&sock2, Duration::from_secs(5));
@@ -210,20 +244,33 @@ fn end_to_end_cluster_real_binaries() {
     cli(&["--socket", s1, "register", "weather.temp", "k"]);
     let sub = Command::new(cli_bin())
         .args(["--socket", s2, "subscribe", "weather.temp"])
-        .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null())
-        .spawn().expect("spawn cluster subscriber");
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn cluster subscriber");
 
     // Publish repeatedly on d1 while the TLS peer link comes up (~1s). At least
     // one message lands after the link is established.
     for _ in 0..15 {
-        cli(&["--socket", s1, "publish", "weather.temp", "k", "--message", "CROSS-NODE-18C"]);
+        cli(&[
+            "--socket",
+            s1,
+            "publish",
+            "weather.temp",
+            "k",
+            "--message",
+            "CROSS-NODE-18C",
+        ]);
         std::thread::sleep(Duration::from_millis(300));
     }
 
     // Stop the daemons so the subscriber exits cleanly and flushes its stdout.
     drop(_d1);
     drop(_d2);
-    let out = sub.wait_with_output().expect("collect d2 subscriber output");
+    let out = sub
+        .wait_with_output()
+        .expect("collect d2 subscriber output");
     let stdout = String::from_utf8_lossy(&out.stdout);
 
     assert!(
@@ -231,5 +278,8 @@ fn end_to_end_cluster_real_binaries() {
         "message published on d1 never reached the d2 subscriber:\n{stdout}"
     );
     // The delivery header names the ORIGIN daemon (d1), proving it crossed.
-    assert!(stdout.contains("from d1"), "delivery should be attributed to origin d1:\n{stdout}");
+    assert!(
+        stdout.contains("from d1"),
+        "delivery should be attributed to origin d1:\n{stdout}"
+    );
 }

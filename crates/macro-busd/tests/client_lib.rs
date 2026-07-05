@@ -25,17 +25,22 @@ impl Harness {
     fn start(daemon_id: &str) -> Harness {
         let socket = unique_socket();
         let cfg = Config {
-            server: ServerConfig { daemon_id: daemon_id.to_string(), socket_path: socket.clone() },
+            server: ServerConfig {
+                daemon_id: daemon_id.to_string(),
+                socket_path: socket.clone(),
+            },
             ..Config::default()
         };
         let registry = macro_busd::build_registry(&cfg);
-        let server =
-            LocalServer::bind(&socket, registry, None, cfg.limits.clone()).unwrap();
+        let server = LocalServer::bind(&socket, registry, None, cfg.limits.clone()).unwrap();
         let (tx, rx) = oneshot::channel();
         tokio::spawn(server.serve(async move {
             let _ = rx.await;
         }));
-        Harness { socket, _shutdown: tx }
+        Harness {
+            socket,
+            _shutdown: tx,
+        }
     }
 
     async fn client(&self) -> Client<tokio::net::UnixStream> {
@@ -112,7 +117,9 @@ async fn multiline_body_roundtrip_with_dot_lines() {
     s.subscribe("t").await.unwrap();
     p.register("t", "k").await.unwrap();
     // Body includes a line that starts with '.' — the library dot-stuffs it.
-    p.publish("t", "k", &["hello", ".world", "..dots", "bye"]).await.unwrap();
+    p.publish("t", "k", &["hello", ".world", "..dots", "bye"])
+        .await
+        .unwrap();
 
     match s.next_event().await.unwrap() {
         Event::Message(m) => {

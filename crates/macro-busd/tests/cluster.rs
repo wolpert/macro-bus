@@ -42,7 +42,12 @@ fn gen_node(id: &str) -> Node {
     let key_path = tmp(&format!("{id}.key"));
     std::fs::write(&cert_path, &cert_pem).unwrap();
     std::fs::write(&key_path, &key_pem).unwrap();
-    Node { id: id.to_string(), cert_path, key_path, cert_pem }
+    Node {
+        id: id.to_string(),
+        cert_path,
+        key_path,
+        cert_pem,
+    }
 }
 
 /// A running daemon in the cluster test.
@@ -72,7 +77,10 @@ fn start_daemon(
 ) -> Daemon {
     let socket = tmp(&format!("{}.sock", node.id));
     let cfg = Config {
-        server: ServerConfig { daemon_id: node.id.clone(), socket_path: socket.clone() },
+        server: ServerConfig {
+            daemon_id: node.id.clone(),
+            socket_path: socket.clone(),
+        },
         limits: Limits::default(),
         cluster: ClusterConfig {
             listen: Some(format!("127.0.0.1:{listen_port}").parse().unwrap()),
@@ -96,7 +104,10 @@ fn start_daemon(
         })
         .await;
     });
-    Daemon { socket, _shutdown: tx }
+    Daemon {
+        socket,
+        _shutdown: tx,
+    }
 }
 
 /// Start a daemon that dials several peers (full-mesh member).
@@ -108,7 +119,10 @@ fn start_daemon_multi(
 ) -> Daemon {
     let socket = tmp(&format!("{}.sock", node.id));
     let cfg = Config {
-        server: ServerConfig { daemon_id: node.id.clone(), socket_path: socket.clone() },
+        server: ServerConfig {
+            daemon_id: node.id.clone(),
+            socket_path: socket.clone(),
+        },
         limits: Limits::default(),
         cluster: ClusterConfig {
             listen: Some(format!("127.0.0.1:{listen_port}").parse().unwrap()),
@@ -135,7 +149,10 @@ fn start_daemon_multi(
         })
         .await;
     });
-    Daemon { socket, _shutdown: tx }
+    Daemon {
+        socket,
+        _shutdown: tx,
+    }
 }
 
 /// Read the next message event within a timeout.
@@ -177,8 +194,14 @@ async fn two_daemon_cluster_forwards_with_loop_prevention() {
     // peer link and registration propagation take a moment to come up. ---
     let mut established = false;
     for _ in 0..100 {
-        pub_a.publish("sensors.temp", "s3cr3t", &["probe"]).await.unwrap();
-        if next_msg(&mut sub_b, Duration::from_millis(100)).await.is_some() {
+        pub_a
+            .publish("sensors.temp", "s3cr3t", &["probe"])
+            .await
+            .unwrap();
+        if next_msg(&mut sub_b, Duration::from_millis(100))
+            .await
+            .is_some()
+        {
             established = true;
             break;
         }
@@ -186,13 +209,24 @@ async fn two_daemon_cluster_forwards_with_loop_prevention() {
     assert!(established, "message from A never reached B's subscriber");
 
     // Drain any remaining probes so the queue is empty.
-    while next_msg(&mut sub_b, Duration::from_millis(150)).await.is_some() {}
+    while next_msg(&mut sub_b, Duration::from_millis(150))
+        .await
+        .is_some()
+    {}
 
     // --- Cross-daemon delivery with a unique payload, exactly once. ---
-    pub_a.publish("sensors.temp", "s3cr3t", &["UNIQUE-A-PAYLOAD"]).await.unwrap();
-    let got = next_msg(&mut sub_b, Duration::from_millis(1000)).await.expect("delivery to B");
+    pub_a
+        .publish("sensors.temp", "s3cr3t", &["UNIQUE-A-PAYLOAD"])
+        .await
+        .unwrap();
+    let got = next_msg(&mut sub_b, Duration::from_millis(1000))
+        .await
+        .expect("delivery to B");
     assert_eq!(got.body, vec!["UNIQUE-A-PAYLOAD".to_string()]);
-    assert_eq!(got.origin, "d1", "origin daemon preserved across federation");
+    assert_eq!(
+        got.origin, "d1",
+        "origin daemon preserved across federation"
+    );
 
     // Loop prevention: the same message must NOT be delivered twice.
     let dup = next_msg(&mut sub_b, Duration::from_millis(300)).await;
@@ -213,7 +247,10 @@ async fn two_daemon_cluster_forwards_with_loop_prevention() {
     tokio::time::sleep(Duration::from_millis(50)).await;
     let mut reverse_ok = false;
     for _ in 0..50 {
-        pub_b.publish("sensors.temp", "s3cr3t", &["FROM-B"]).await.unwrap();
+        pub_b
+            .publish("sensors.temp", "s3cr3t", &["FROM-B"])
+            .await
+            .unwrap();
         if let Some(m) = next_msg(&mut sub_a, Duration::from_millis(100)).await {
             assert_eq!(m.body, vec!["FROM-B".to_string()]);
             assert_eq!(m.origin, "d2");
@@ -233,7 +270,11 @@ async fn three_node_cluster_reforwards_without_duplicates() {
     let n2 = gen_node("d2");
     let n3 = gen_node("d3");
     let ca = tmp("ca3.pem");
-    std::fs::write(&ca, format!("{}{}{}", n1.cert_pem, n2.cert_pem, n3.cert_pem)).unwrap();
+    std::fs::write(
+        &ca,
+        format!("{}{}{}", n1.cert_pem, n2.cert_pem, n3.cert_pem),
+    )
+    .unwrap();
 
     let p1 = free_port();
     let p2 = free_port();
@@ -255,31 +296,62 @@ async fn three_node_cluster_reforwards_without_duplicates() {
     let mut up3 = false;
     for _ in 0..200 {
         pub1.publish("evt", "k", &["probe"]).await.unwrap();
-        if !up2 && next_msg(&mut sub2, Duration::from_millis(50)).await.is_some() {
+        if !up2
+            && next_msg(&mut sub2, Duration::from_millis(50))
+                .await
+                .is_some()
+        {
             up2 = true;
         }
-        if !up3 && next_msg(&mut sub3, Duration::from_millis(50)).await.is_some() {
+        if !up3
+            && next_msg(&mut sub3, Duration::from_millis(50))
+                .await
+                .is_some()
+        {
             up3 = true;
         }
         if up2 && up3 {
             break;
         }
     }
-    assert!(up2 && up3, "mesh never fully established (d2={up2}, d3={up3})");
+    assert!(
+        up2 && up3,
+        "mesh never fully established (d2={up2}, d3={up3})"
+    );
 
     // Drain any leftover probes on both subscribers.
-    while next_msg(&mut sub2, Duration::from_millis(150)).await.is_some() {}
-    while next_msg(&mut sub3, Duration::from_millis(150)).await.is_some() {}
+    while next_msg(&mut sub2, Duration::from_millis(150))
+        .await
+        .is_some()
+    {}
+    while next_msg(&mut sub3, Duration::from_millis(150))
+        .await
+        .is_some()
+    {}
 
     // One unique message from d1 -> exactly once on d2 and d3.
     pub1.publish("evt", "k", &["ONCE"]).await.unwrap();
 
-    let g2 = next_msg(&mut sub2, Duration::from_millis(1000)).await.expect("d2 delivery");
+    let g2 = next_msg(&mut sub2, Duration::from_millis(1000))
+        .await
+        .expect("d2 delivery");
     assert_eq!(g2.body, vec!["ONCE".to_string()]);
-    assert!(next_msg(&mut sub2, Duration::from_millis(300)).await.is_none(), "d2 got a duplicate");
+    assert!(
+        next_msg(&mut sub2, Duration::from_millis(300))
+            .await
+            .is_none(),
+        "d2 got a duplicate"
+    );
 
-    let g3 = next_msg(&mut sub3, Duration::from_millis(1000)).await.expect("d3 delivery");
+    let g3 = next_msg(&mut sub3, Duration::from_millis(1000))
+        .await
+        .expect("d3 delivery");
     assert_eq!(g3.body, vec!["ONCE".to_string()]);
     assert_eq!(g3.origin, "d1");
-    assert!(next_msg(&mut sub3, Duration::from_millis(300)).await.is_none(), "d3 got a duplicate");
+    assert!(
+        next_msg(&mut sub3, Duration::from_millis(300))
+            .await
+            .is_none(),
+        "d3 got a duplicate"
+    );
 }
